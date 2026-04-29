@@ -2143,11 +2143,24 @@ class ChatGPTAutopay {
       }
 
       logger.info(this.tag + "Inisiasi pembayaran via Petrix...");
-      const stripeLink = await this.getStripeLinkViaPetrix();
+      await this.getStripeLinkViaPetrix();
       this._pastStripe = !![];
 
+      // Gunakan Session ID dari Petrix untuk menjalankan flow otomatisasi Stripe secara penuh
+      logger.info(this.tag + "Inisiasi Stripe Session...");
+      await this.initStripeCheckout();
+      await this.initStripeSession();
+
+      logger.info(this.tag + "Menyiapkan metode pembayaran GoPay...");
+      const addr = generateBillingAddress(this.name);
+      const pm = await this.createPaymentMethod(addr);
+      this.paymentMethodId = pm.id;
+
+      logger.info(this.tag + "Konfirmasi pembayaran...");
+      const confirm = await this.confirmCheckout(this.paymentMethodId);
+
       logger.info(this.tag + "Arah midtrans...");
-      const d = await this.followStripeRedirect({ next_action: { redirect_to_url: { url: stripeLink } } });
+      const d = await this.followStripeRedirect(confirm);
       if (d?.alreadySucceeded) {
         logger.info(this.tag + "Transaksi sudah berhasil, melewati GoPay...");
         await sleep(0x1388);
