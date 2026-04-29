@@ -1396,9 +1396,10 @@ class ChatGPTAutopay {
         let t = null;
         if (a?.approval_method === "manual") {
           try {
+            logger.info(this.tag + "Mengirim sinyal approve ke OpenAI...");
             const v = await i();
             logger.info(
-              this.tag + "Approve: " + (v.status === 0xc8 ? "✓" : v.status),
+              this.tag + "Approve response: " + (v.status === 0xc8 ? "✓" : v.status),
             );
           } catch (w) {
             logger.warn(
@@ -1406,7 +1407,7 @@ class ChatGPTAutopay {
             );
           }
         }
-        const u = 0x2;
+        const u = 30; // Tingkatkan polling ke 30 kali (~150 detik)
         for (let x = 0x0; x < u; x++) {
           await sleep(0x1388);
           const y =
@@ -1483,20 +1484,17 @@ class ChatGPTAutopay {
                 break;
               }
             }
-            logger.debug(
+            logger.info(
               this.tag +
-              "Approve poll " +
+              "Polling redirect " +
               (x + 0x1) +
               "/" +
               u +
-              ": " +
+              ": status=" +
               D +
-              "/" +
+              ", pay_status=" +
               E +
-              " si=" +
-              (k ? "yes" : "-") +
-              " pi=" +
-              (l ? "yes" : "-"),
+              (b ? " (Got URL!)" : " (Still waiting...)")
             );
           }
           if (!b) {

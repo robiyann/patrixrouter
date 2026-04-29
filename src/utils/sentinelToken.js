@@ -387,6 +387,7 @@ async function fetchChallenge(
   sentinelId,
   cycleTLSFn,
 ) {
+  logger.info(`Fetching sentinel challenge for flow: ${flow}...`);
   const proof = generateRequirementsProof(userAgent, sentinelId);
 
   // Prefer CycleTLS if provided (matches Chrome TLS fingerprint of register request)
@@ -489,6 +490,7 @@ async function generateSentinelTokens(
   sentinelId,
   cycleTLSFn,
 ) {
+  logger.info(`Generating sentinel tokens for ${flow}...`);
   // Use provided UA or fallback to hardcoded default
   const ua = userAgent || CHROME_UA;
 
