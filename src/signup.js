@@ -341,43 +341,18 @@ class ChatGPTSignup {
         if (d < b - 0x1) continue;
         return { success: ![], email: this.email, error: m };
       }
+      if (e.success) {
         logger.success(this.tag + "Account created ✓");
-
-        // Ambil Refresh Token via Full Login OAuth
-        let refreshToken = null;
-        try {
-            logger.info(this.tag + "Mengambil Refresh Token via Full Login OAuth...");
-            const oauthRes = await performLoginOAuth(
-                this.sharedCycleTLS, 
-                this.email,
-                this.password,
-                this.proxyUrl, 
-                this.client.defaults?.headers?.["User-Agent"] || "",
-                { sec: "" },
-                async () => {
-                    if (this.otpFn) return await this.otpFn();
-                    return await askTelegram("Masukkan kode verifikasi OAuth untuk " + this.email + ": ", this.tag);
-                }
-            );
-            refreshToken = oauthRes.refreshToken;
-            this.oauthTokens = oauthRes;
-            logger.success(this.tag + "Refresh Token didapat ✓");
-        } catch (oauthErr) {
-            logger.warn(this.tag + "Gagal mengambil Refresh Token: " + oauthErr.message);
-        }
-
         return {
           success: !![],
           email: this.email,
           password: this.password,
           name: this.name,
           accessToken: e.accessToken || null,
-          oauthAccessToken: this.oauthTokens?.accessToken || null,
-          refreshToken: refreshToken,
-          idToken: this.oauthTokens?.idToken || null,
-          cookies: e.cookieJar || null, // <- tambahkan cookieJar
+          cookies: e.cookieJar || null,
           message: "Akun berhasil dibuat!",
         };
+      }
       const { step: f, status: g, data: h } = e;
       const i = e.error || "";
       let j = i;
