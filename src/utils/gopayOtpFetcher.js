@@ -15,7 +15,7 @@ const COMMON_HEADERS = {
  */
 async function fetchGopayOtp(gopayPhone, serverUrl, serverNumber = '1') {
     const baseUrl = serverUrl.replace(/\/$/, '');
-    const maxAttempts = 25;
+    const maxAttempts = 7;
     const delayMs = 3000;
     const phone = String(gopayPhone).replace(/^0|^\+62/, '');
 
