@@ -1681,8 +1681,7 @@ class ChatGPTAutopay {
         
         const d = new Error("GoPay sudah terhubung!");
         d.hint = "Server akan otomatis me-reset slot ini. Coba pakai slot yang lain.";
-        d.noRetry = true; // Langsung gagal, ganti akun/slot.
-        d.linkedConflict = true; // Flag for index.js to force release
+        d.linkedConflict = true; // Flag for index.js and runAutopay to force release/retry
         throw d;
       }
       throw new Error("GoPay linking failed: " + b.status + " " + c);
@@ -2129,69 +2128,108 @@ class ChatGPTAutopay {
           this._oaiJar = new LoginCookieJar();
         }
         // Warm-up: hit /api/auth/session agar session cookies OpenAI tersedia
-        // sebelum request checkout. Tanpa ini, request 403 karena jar kosong.
         try {
           logger.info(this.tag + "Warming up session cookies...");
-          const _ws = await this._oaiGet(
+          await this._oaiGet(
             "https://chatgpt.com/api/auth/session",
             { Referer: "https://chatgpt.com/" }
           );
-          logger.debug(this.tag + "Session warm-up status: " + _ws.status);
           await sleep(1500);
         } catch (_we) {
-          logger.debug(this.tag + "Session warm-up failed (non-fatal): " + _we.message);
+          logger.debug(this.tag + "Session warm-up failed: " + _we.message);
         }
       }
 
-      logger.info(this.tag + "Inisiasi pembayaran via Petrix...");
-      await this.getStripeLinkViaPetrix();
-      this._pastStripe = !![];
+      let paymentSuccess = false;
+      let paymentAttempts = 0;
+      const maxPaymentAttempts = 3;
 
-      // Gunakan Session ID dari Petrix untuk menjalankan flow otomatisasi Stripe secara penuh
-      logger.info(this.tag + "Inisiasi Stripe Session...");
-      await this.initStripeCheckout();
-      await this.initStripeSession();
+      while (paymentAttempts < maxPaymentAttempts && !paymentSuccess) {
+          paymentAttempts++;
+          try {
+              if (paymentAttempts === 1) {
+                  logger.info(this.tag + "Inisiasi pembayaran via Petrix...");
+                  await this.getStripeLinkViaPetrix();
+                  this._pastStripe = !![];
+              } else {
+                  logger.info(this.tag + `[Retry] Mengganti slot GoPay (Percobaan ${paymentAttempts}/${maxPaymentAttempts})...`);
+                  // Lepas slot lama (jika ada) untuk memicu reset di server
+                  if (this.earlyReleaseFn) {
+                      logger.info(this.tag + "Melepas slot lama agar di-reset oleh server...");
+                      await this.earlyReleaseFn().catch(() => {});
+                  }
+                  // Ambil slot baru dari pool
+                  if (this.claimGopaySlotFn) {
+                      const slot = await this.claimGopaySlotFn();
+                      if (slot) {
+                          this.gopayPhone = slot.phone;
+                          this.gopayPin = slot.pin;
+                          this.serverNumber = String(slot.id);
+                          this.webhookAction = slot.webhook_action;
+                      }
+                  }
+              }
 
-      logger.info(this.tag + "Menyiapkan metode pembayaran GoPay...");
-      const addr = generateBillingAddress(this.name);
-      const pm = await this.createPaymentMethod(addr);
-      this.paymentMethodId = pm.id;
+              // Inisiasi flow Stripe (Setiap ganti nomor, kita butuh session & PaymentMethod baru)
+              logger.info(this.tag + "Sinkronisasi sesi Stripe...");
+              await this.initStripeCheckout();
+              await this.initStripeSession();
 
-      logger.info(this.tag + "Konfirmasi pembayaran...");
-      const confirm = await this.confirmCheckout(this.paymentMethodId);
+              logger.info(this.tag + "Menyiapkan metode pembayaran GoPay...");
+              const addr = generateBillingAddress(this.name);
+              const pm = await this.createPaymentMethod(addr);
+              this.paymentMethodId = pm.id;
 
-      logger.info(this.tag + "Arah midtrans...");
-      const d = await this.followStripeRedirect(confirm);
-      if (d?.alreadySucceeded) {
-        logger.info(this.tag + "Transaksi sudah berhasil, melewati GoPay...");
-        await sleep(0x1388);
-        logger.info(this.tag + "Verifikasi checkout...");
-        await this.verifyCheckout();
-      } else {
-        await this.getMidtransTransaction();
-        logger.info(this.tag + "Hubungkan GoPay (+62" + this.gopayPhone + ")...");
-        const f = await this.linkGoPay();
-        await this.gopayAuthorize(f);
-        logger.info(this.tag + "Verifikasi GoPay...");
-        await this.handleGoPayOtpAndPin();
-        await sleep(0x1388);
-        logger.info(this.tag + "Proses pembayaran GoPay...");
-        const g = await this.chargeGoPay();
-        await this.handleChargePin(g);
-        await sleep(0x2710);
-        logger.info(this.tag + "Cek penyelesaian...");
-        await this.checkTransactionStatus();
+              logger.info(this.tag + "Konfirmasi pembayaran...");
+              const confirm = await this.confirmCheckout(this.paymentMethodId);
 
-        if (typeof this.earlyReleaseFn === 'function') {
-           logger.info(this.tag + "Pembayaran selesai, merilis slot GoPay lebih awal untuk di-reset...");
-           await this.earlyReleaseFn();
-        }
+              logger.info(this.tag + "Arah midtrans...");
+              const d = await this.followStripeRedirect(confirm);
+              
+              if (d?.alreadySucceeded) {
+                  logger.info(this.tag + "Transaksi sudah berhasil, melewati GoPay...");
+                  await sleep(0x7d0);
+                  paymentSuccess = true;
+              } else {
+                  await this.getMidtransTransaction();
+                  logger.info(this.tag + "Hubungkan GoPay (+62" + this.gopayPhone + ")...");
+                  const f = await this.linkGoPay();
+                  await this.gopayAuthorize(f);
+                  
+                  logger.info(this.tag + "Verifikasi GoPay...");
+                  await this.handleGoPayOtpAndPin();
+                  
+                  await sleep(0x7d0);
+                  logger.info(this.tag + "Proses pembayaran GoPay...");
+                  const g = await this.chargeGoPay();
+                  await this.handleChargePin(g);
+                  await sleep(0x1388);
+                  
+                  paymentSuccess = true;
+              }
+          } catch (err) {
+              const errMsg = err.message || "";
+              const isRetryable = errMsg.includes("Timeout") || 
+                                errMsg.includes("terhubung") || 
+                                errMsg.includes("OTP") ||
+                                err.linkedConflict === true;
 
-        logger.info(this.tag + "Verifikasi checkout...");
-        await this.verifyCheckout();
-        // WorkerPool / index.js yang memanggil bot ini PASTI akan melakukan releaseGopaySlot()
-        // baik saat try sukses maupun catch error. Sehingga OTP Server lah yang akan handle trigger reset-link akhir.
+              if (isRetryable && paymentAttempts < maxPaymentAttempts) {
+                  logger.warn(this.tag + `Pembayaran gagal: ${errMsg.substring(0, 60)}. Mencoba ganti slot...`);
+                  await sleep(3000);
+                  continue;
+              }
+              throw err;
+          }
       }
+
+      if (typeof this.earlyReleaseFn === 'function') {
+         logger.info(this.tag + "Pembayaran selesai, merilis slot GoPay lebih awal...");
+         await this.earlyReleaseFn();
+      }
+
+      logger.info(this.tag + "Verifikasi akhir checkout...");
+      await this.verifyCheckout();
 
       logger.info(this.tag + "Verifikasi akhir langganan API...");
       const isSub = await this.checkSubscriptionStatus();
