@@ -230,7 +230,9 @@ async function handleAccountTask(task) {
                     ...aRes, 
                     email: currentEmail, 
                     password: effectivePassword, 
-                    refreshToken,
+                    refreshToken: aRes.refreshToken,
+                    idToken: aRes.idToken,
+                    oauthAccessToken: aRes.oauthAccessToken,
                     mailToken: token,
                     mailProvider,
                     accountType: aRes.success ? 'Plus' : (aRes.accountType || 'Free') 
@@ -268,7 +270,8 @@ async function handleAccountTask(task) {
                     password: effectivePassword, 
                     accountType: 'Free', 
                     accessToken: sRes.accessToken,
-                    refreshToken: refreshToken 
+                    refreshToken: sRes.refreshToken,
+                    idToken: sRes.idToken
                 });
 
                 if (mode === 'autopay' || mode === 'auto_autopay') {
@@ -306,7 +309,9 @@ async function handleAccountTask(task) {
                         ...aRes, 
                         email: currentEmail, 
                         password: effectivePassword, 
-                        refreshToken,
+                        refreshToken: aRes.refreshToken,
+                        idToken: aRes.idToken,
+                        oauthAccessToken: aRes.oauthAccessToken,
                         mailToken: token,
                         mailProvider,
                         accountType: aRes.success ? 'Plus' : (aRes.accountType || 'Free') 
@@ -382,7 +387,10 @@ async function handleAutopayResult(chatId, email, password, aRes, mailProvider, 
             `━━━━━━━━━━━━━━━━━━\n` +
             `📧 Email    : <code>${email}</code>\n` +
             `🔑 Password : <code>${password}</code>\n` +
-            `⭐ Status   : <b>ChatGPT Plus (ACTIVE)</b>\n\n` +
+            `⭐ Status   : <b>ChatGPT Plus (ACTIVE)</b>\n` +
+            (aRes.refreshToken ? `🔑 RT       : <code>${aRes.refreshToken}</code>\n` : ``) +
+            (aRes.oauthAccessToken ? `🔑 AT       : <code>${aRes.oauthAccessToken}</code>\n` : ``) +
+            (aRes.idToken ? `🔑 IDT      : <code>${aRes.idToken}</code>\n\n` : `\n`) +
             `<i>Account is ready for use. Enjoy!</i>`
         );
     } else {

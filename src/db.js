@@ -40,6 +40,7 @@ try {
             accountType TEXT,
             accessToken TEXT,
             refreshToken TEXT,
+            idToken TEXT,
             mailToken TEXT,
             updatedAt TEXT
         );
@@ -63,6 +64,12 @@ try {
         db.prepare("ALTER TABLE users ADD COLUMN tmailDomains TEXT").run();
         logger.info('[DB] Kolom tmailDomains ditambahkan ke tabel users.');
     }
+    
+    const accountCols = db.prepare("PRAGMA table_info(accounts)").all().map(c => c.name);
+    if (!accountCols.includes('idToken')) {
+        db.prepare("ALTER TABLE accounts ADD COLUMN idToken TEXT").run();
+        logger.info('[DB] Kolom idToken ditambahkan ke tabel accounts.');
+    }
 } catch (e) {
     logger.error("[DB] Failed to open db.sqlite: " + e.message);
     process.exit(1);
@@ -78,14 +85,15 @@ const stmtInsertUserBase = db.prepare('INSERT OR IGNORE INTO users (id, firstNam
 
 const stmtGetAccount = db.prepare('SELECT * FROM accounts WHERE email = ?');
 const stmtInsertAccount = db.prepare(`
-    INSERT INTO accounts (email, userId, password, accountType, accessToken, refreshToken, mailToken, updatedAt)
-    VALUES (@email, @userId, @password, @accountType, @accessToken, @refreshToken, @mailToken, @updatedAt)
+    INSERT INTO accounts (email, userId, password, accountType, accessToken, refreshToken, idToken, mailToken, updatedAt)
+    VALUES (@email, @userId, @password, @accountType, @accessToken, @refreshToken, @idToken, @mailToken, @updatedAt)
     ON CONFLICT(email) DO UPDATE SET
         userId = excluded.userId,
         password = excluded.password,
         accountType = excluded.accountType,
         accessToken = excluded.accessToken,
         refreshToken = excluded.refreshToken,
+        idToken = excluded.idToken,
         mailToken = excluded.mailToken,
         updatedAt = excluded.updatedAt
 `);
@@ -245,6 +253,7 @@ function saveAccount(email, data) {
         accountType: merged.accountType || null,
         accessToken: merged.accessToken || null,
         refreshToken: merged.refreshToken || null,
+        idToken: merged.idToken || null,
         mailToken: merged.mailToken || null,
         updatedAt: new Date().toISOString()
     };

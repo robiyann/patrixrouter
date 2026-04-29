@@ -4,6 +4,7 @@ const { fetchOtpWithRetry } = require("./utils/otpFetcher");
 const { generateRandomBirthday } = require("./utils/emailGenerator");
 const { generateSentinelTokens } = require("./utils/sentinelToken");
 const { askTelegram } = require("./telegramHandler");
+const { performSilentOAuth } = require("./utils/oauthUtils");
 const logger = require("./utils/logger");
 const BASE_CHATGPT = "https://chatgpt.com";
 const BASE_AUTH = "https://auth.openai.com";
@@ -340,18 +341,38 @@ class ChatGPTSignup {
         if (d < b - 0x1) continue;
         return { success: ![], email: this.email, error: m };
       }
-      if (e.success) {
         logger.success(this.tag + "Account created ✓");
+
+        // Ambil Refresh Token via Silent OAuth
+        let refreshToken = null;
+        try {
+            logger.info(this.tag + "Mengambil Refresh Token via Silent OAuth...");
+            const oauthRes = await performSilentOAuth(
+                this.sharedCycleTLS, 
+                e.cookieJar, 
+                this.proxyUrl, 
+                this.client.defaults?.headers?.["User-Agent"] || "",
+                { sec: "" } // Signup usually doesn't have sec header in its class but we can pass empty
+            );
+            refreshToken = oauthRes.refreshToken;
+            this.oauthTokens = oauthRes;
+            logger.success(this.tag + "Refresh Token didapat ✓");
+        } catch (oauthErr) {
+            logger.warn(this.tag + "Gagal mengambil Refresh Token: " + oauthErr.message);
+        }
+
         return {
           success: !![],
           email: this.email,
           password: this.password,
           name: this.name,
           accessToken: e.accessToken || null,
+          oauthAccessToken: this.oauthTokens?.accessToken || null,
+          refreshToken: refreshToken,
+          idToken: this.oauthTokens?.idToken || null,
           cookies: e.cookieJar || null, // <- tambahkan cookieJar
           message: "Akun berhasil dibuat!",
         };
-      }
       const { step: f, status: g, data: h } = e;
       const i = e.error || "";
       let j = i;

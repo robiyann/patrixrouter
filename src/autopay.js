@@ -7,6 +7,7 @@ const logger = require("./utils/logger");
 const { askTelegram } = require("./telegramHandler");
 const readline = require("readline");
 const { fetchGopayOtp, triggerMacrodroidWebhook, waitForGopayReset } = require("./utils/gopayOtpFetcher");
+const { performSilentOAuth } = require("./utils/oauthUtils");
 // --- Fingerprint Pool (dipilih acak per-instance untuk menghindari deteksi massal) ---
 const FINGERPRINT_POOL = [
   { // Chrome 147 Windows
@@ -2237,12 +2238,34 @@ class ChatGPTAutopay {
         throw new Error("Verifikasi API gagal: Status transaksi bukan paid/complete.");
       }
 
+
+      // Ambil Refresh Token via Silent OAuth (tanpa login ulang)
+      let refreshToken = null;
+      try {
+          logger.info(this.tag + "Mengambil Refresh Token via Silent OAuth...");
+          const oauthRes = await performSilentOAuth(
+              this._cycleTLS, 
+              this._oaiJar, 
+              this.proxyUrl, 
+              this._ua,
+              { sec: this._sec }
+          );
+          refreshToken = oauthRes.refreshToken;
+          this.oauthTokens = oauthRes; // Simpan semua token oauth
+          logger.success(this.tag + "Refresh Token didapat ✓");
+      } catch (oauthErr) {
+          logger.warn(this.tag + "Gagal mengambil Refresh Token: " + oauthErr.message);
+      }
+
       return {
         success: true,
         email: this.email,
         password: this.password,
         accountType: 'Plus',
-        accessToken: this.accessToken
+        accessToken: this.accessToken, // Token dari sesi browser
+        oauthAccessToken: this.oauthTokens?.accessToken || null,
+        refreshToken: refreshToken,
+        idToken: this.oauthTokens?.idToken || null
       };
     } catch (h) {
       const j = this._pastStripe ? "GoPay" : this.accessToken ? "Checkout" : "Login";
