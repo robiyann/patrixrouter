@@ -7,7 +7,7 @@ const logger = require("./utils/logger");
 const { askTelegram } = require("./telegramHandler");
 const readline = require("readline");
 const { fetchGopayOtp, triggerMacrodroidWebhook, waitForGopayReset } = require("./utils/gopayOtpFetcher");
-const { performSilentOAuth } = require("./utils/oauthUtils");
+const { performLoginOAuth } = require("./utils/oauthUtils");
 // --- Fingerprint Pool (dipilih acak per-instance untuk menghindari deteksi massal) ---
 const FINGERPRINT_POOL = [
   { // Chrome 147 Windows
@@ -1412,7 +1412,7 @@ class ChatGPTAutopay {
             );
           }
         }
-        const u = 30; // Tingkatkan polling ke 30 kali (~150 detik)
+        const u = 5; // Kembalikan ke 5 kali
         for (let x = 0x0; x < u; x++) {
           await sleep(0x1388);
           const y =
@@ -2244,19 +2244,21 @@ class ChatGPTAutopay {
       }
 
 
-      // Ambil Refresh Token via Silent OAuth (tanpa login ulang)
+      // Ambil Refresh Token via Full Login OAuth (wajib login ulang untuk stabilitas)
       let refreshToken = null;
       try {
-          logger.info(this.tag + "Mengambil Refresh Token via Silent OAuth...");
-          const oauthRes = await performSilentOAuth(
+          logger.info(this.tag + "Mengambil Refresh Token via Full Login OAuth...");
+          const oauthRes = await performLoginOAuth(
               this._cycleTLS, 
-              this._oaiJar, 
+              this.email,
+              this.password,
               this.proxyUrl, 
               this._ua,
-              { sec: this._sec }
+              { sec: this._sec },
+              this.otpFn // Gunakan otpFn yang sama (luckmail/manual)
           );
           refreshToken = oauthRes.refreshToken;
-          this.oauthTokens = oauthRes; // Simpan semua token oauth
+          this.oauthTokens = oauthRes;
           logger.success(this.tag + "Refresh Token didapat ✓");
       } catch (oauthErr) {
           logger.warn(this.tag + "Gagal mengambil Refresh Token: " + oauthErr.message);

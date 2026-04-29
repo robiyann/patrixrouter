@@ -4,7 +4,7 @@ const { fetchOtpWithRetry } = require("./utils/otpFetcher");
 const { generateRandomBirthday } = require("./utils/emailGenerator");
 const { generateSentinelTokens } = require("./utils/sentinelToken");
 const { askTelegram } = require("./telegramHandler");
-const { performSilentOAuth } = require("./utils/oauthUtils");
+const { performLoginOAuth } = require("./utils/oauthUtils");
 const logger = require("./utils/logger");
 const BASE_CHATGPT = "https://chatgpt.com";
 const BASE_AUTH = "https://auth.openai.com";
@@ -343,16 +343,21 @@ class ChatGPTSignup {
       }
         logger.success(this.tag + "Account created ✓");
 
-        // Ambil Refresh Token via Silent OAuth
+        // Ambil Refresh Token via Full Login OAuth
         let refreshToken = null;
         try {
-            logger.info(this.tag + "Mengambil Refresh Token via Silent OAuth...");
-            const oauthRes = await performSilentOAuth(
+            logger.info(this.tag + "Mengambil Refresh Token via Full Login OAuth...");
+            const oauthRes = await performLoginOAuth(
                 this.sharedCycleTLS, 
-                e.cookieJar, 
+                this.email,
+                this.password,
                 this.proxyUrl, 
                 this.client.defaults?.headers?.["User-Agent"] || "",
-                { sec: "" } // Signup usually doesn't have sec header in its class but we can pass empty
+                { sec: "" },
+                async () => {
+                    if (this.otpFn) return await this.otpFn();
+                    return await askTelegram("Masukkan kode verifikasi OAuth untuk " + this.email + ": ", this.tag);
+                }
             );
             refreshToken = oauthRes.refreshToken;
             this.oauthTokens = oauthRes;
