@@ -1564,9 +1564,25 @@ class ChatGPTAutopay {
         Referer: "https://chatgpt.com/",
       },
     });
-    if (j.status === 0x12e || j.status === 0x12d) {
-      const T = j.headers.location;
-      const U = T.match(/\/snap\/v4\/redirection\/([a-f0-9-]+)/);
+    let redirectUrl = (j.status === 0x12e || j.status === 0x12d) ? j.headers.location : null;
+
+    if (j.status === 200 && !redirectUrl) {
+      const body = typeof j.data === 'string' ? j.data : JSON.stringify(j.data);
+      const mMatch = body.match(/https?:\\?\/\\?\/app\.midtrans\.com\/snap\/v4\/redirection\/([a-f0-9-]+)/);
+      if (mMatch) {
+          redirectUrl = mMatch[0].replace(/\\\//g, '/');
+          logger.info(this.tag + "Midtrans URL found in page body ✓");
+      } else {
+          const pMatch = body.match(/https?:\\?\/\\?\/pm-redirects\.stripe\.com[^"\\]*/);
+          if (pMatch) {
+              redirectUrl = pMatch[0].replace(/\\\//g, '/');
+              logger.info(this.tag + "Stripe direct redirect found in page body ✓");
+          }
+      }
+    }
+
+    if (redirectUrl) {
+      const U = redirectUrl.match(/\/snap\/v4\/redirection\/([a-f0-9-]+)/);
       if (U) {
         this.midtransSnapId = U[0x1];
         const V = b.match(/sa_nonce_([A-Za-z0-9]+)/);
@@ -1576,9 +1592,21 @@ class ChatGPTAutopay {
         logger.debug(
           this.tag + "Midtrans SNAP ✓ (" + this.midtransSnapId + ")",
         );
-        return { snapId: this.midtransSnapId, redirectUrl: T };
+        return { snapId: this.midtransSnapId, redirectUrl: redirectUrl };
+      }
+      
+      // Jika itu URL pm-redirects, ikuti lagi secara rekursif
+      if (redirectUrl.includes('pm-redirects.stripe.com')) {
+          return this.followStripeRedirect({ next_action: { redirect_to_url: { url: redirectUrl } } });
       }
     }
+
+    // Jika masih gagal mendapatkan Snap ID tapi status 200, coba polling jika ada Session ID
+    if (j.status === 200 && this.checkoutSessionId && !redirectUrl) {
+        logger.warn(this.tag + "Status 200 tapi URL redirect tidak ditemukan di body. Mencoba polling...");
+        return this.followStripeRedirect(null);
+    }
+
     throw new Error(
       "Unexpected redirect response: " +
       j.status +
