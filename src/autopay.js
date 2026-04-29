@@ -278,6 +278,11 @@ class ChatGPTAutopay {
     this._build = _fp.build;
     this.sessionId = uuidv4();
     this.stripeJsId = uuidv4();
+    this.accessToken = a.accessToken || null;
+    this.oauthAccessToken = a.oauthAccessToken || null;
+    this.refreshToken = a.refreshToken || null;
+    this.idToken = a.idToken || null;
+    this._oaiJar = a.cookies || null; 
     this.tag = a.threadId ? " \u001b[36m[#" + a.threadId + (this.email ? " | " + this.email : "") + "]\u001b[0m " : "";
     this.clientId = a.clientId || "app_X8zY6vW2pQ9tR3dE7nK1jL5gH";
     this.redirectUri =
@@ -2080,7 +2085,7 @@ class ChatGPTAutopay {
       plan: "plus",
       payment: "longlink",
       currency: "Indonesia",
-      session: this.accessToken // Menggunakan accessToken hasil registrasi atau login
+      session: this.accessToken || this.oauthAccessToken // Gunakan oauthAccessToken sebagai fallback jika session utama belum siap
     };
 
     try {
@@ -2124,6 +2129,8 @@ class ChatGPTAutopay {
       } else {
         if (!this._cycleTLS) {
           this._cycleTLS = this.sharedCycleTLS || (await initCycleTLS());
+        }
+        if (!this._oaiJar) {
           this._oaiJar = new LoginCookieJar();
         }
         // Warm-up: hit /api/auth/session agar session cookies OpenAI tersedia

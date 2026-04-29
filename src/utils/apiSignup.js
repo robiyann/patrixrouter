@@ -462,8 +462,8 @@ async function runSignupViaAPI(
       await n["followRedirects"](ag, {}, 0xf);
       k?.("OAuth\x20✓");
       // Retry session endpoint: OpenAI kadang delay mengembalikan token
-      for (let _s = 0; _s < 5; _s++) {
-        if (_s > 0) await new Promise(r => setTimeout(r, 3000));
+      for (let _s = 0; _s < 10; _s++) {
+        if (_s > 0) await new Promise(r => setTimeout(r, 5000));
         const ah = await n["get"](BASE + "/api/auth/session", {
           Referer: BASE + "/",
         });
@@ -480,7 +480,7 @@ async function runSignupViaAPI(
       }
     }
     k?.("Done\x20✓");
-    return { success: !![], accessToken: U };
+    return { success: !![], accessToken: U, cookieJar: n["jar"] };
   } finally {
     await n["close"]();
   }

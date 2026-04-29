@@ -22,6 +22,9 @@ const REDIRECT_URI = "http://localhost:1455/auth/callback";
 const SCOPE = "openid profile email offline_access api.connectors.read api.connectors.invoke";
 
 async function performSilentOAuth(cycleTLS, jar, proxyUrl, userAgent, fingerprint) {
+  if (!jar || typeof jar.headerFor !== "function") {
+    throw new Error("Invalid or missing cookie jar for OAuth handshake");
+  }
   const { verifier, challenge } = generatePKCE();
   const state = base64UrlEncode(crypto.randomBytes(16));
 
