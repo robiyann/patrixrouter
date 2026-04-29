@@ -2105,6 +2105,7 @@ class ChatGPTAutopay {
         const match = stripeUrl.match(/cs_live_[A-Za-z0-9]+/);
         if (match) {
           this.checkoutSessionId = match[0];
+          this.publishableKey = STRIPE_PK;
           logger.debug(this.tag + "Extracted Checkout Session ID: " + this.checkoutSessionId);
         }
 
