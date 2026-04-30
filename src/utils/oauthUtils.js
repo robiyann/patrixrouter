@@ -164,7 +164,8 @@ async function followRedirects(cycleTLS, startUrl, jar, ua, proxy, maxHops = 10)
 
     if (resp.status === 0) throw new Error(`Network error on: ${current}`);
 
-    const loc = resp.headers?.Location || resp.headers?.location;
+    let loc = resp.headers?.Location || resp.headers?.location;
+    if (Array.isArray(loc)) loc = loc[0];
     if (resp.status >= 300 && resp.status < 400 && loc) {
       current = loc.startsWith("http") ? loc : new URL(loc, current).href;
       continue;
@@ -281,7 +282,8 @@ async function followToAuthCode(cycleTLS, startUrl, jar, ua, proxy, maxHops = 15
 
     if (resp.status === 0) throw new Error(`Network error on consent redirect: ${current}`);
 
-    const loc = resp.headers?.Location || resp.headers?.location;
+    let loc = resp.headers?.Location || resp.headers?.location;
+    if (Array.isArray(loc)) loc = loc[0];
 
     // Check callback in location header
     if (loc && loc.includes("localhost:1455")) {
