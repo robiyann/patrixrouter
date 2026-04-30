@@ -2081,11 +2081,20 @@ class ChatGPTAutopay {
   }
   async getStripeLinkViaPetrix() {
     logger.info(this.tag + "Mengambil link Stripe via Petrix API...");
+    const token = this.accessToken || this.oauthAccessToken;
+    
+    // Log detail token untuk debugging
+    if (!token) {
+      logger.warn(this.tag + "⚠️ Petrix: accessToken KOSONG! Login mungkin belum dijalankan atau gagal.");
+      throw new Error("Access token kosong — tidak bisa memanggil Petrix");
+    }
+    logger.info(this.tag + "Petrix token: " + token.substring(0, 30) + "... (" + token.length + "ch)");
+
     const payload = {
       plan: "plus",
       payment: "longlink",
       currency: "Indonesia",
-      session: this.accessToken || this.oauthAccessToken // Gunakan oauthAccessToken sebagai fallback jika session utama belum siap
+      session: token
     };
 
     try {
