@@ -19,6 +19,9 @@
 
 const crypto = require("crypto");
 const logger = require("./logger");
+const { v4: uuidv4 } = require("uuid");
+const { generateSentinelTokens } = require("./sentinelToken");
+
 
 // ============================================================
 // Constants  (Codex Desktop)
@@ -115,7 +118,7 @@ async function tlsGet(cycleTLS, url, jar, ua, extraHeaders, proxy) {
   return resp;
 }
 
-async function tlsPost(cycleTLS, url, bodyObj, jar, ua, referer, proxy) {
+async function tlsPost(cycleTLS, url, bodyObj, jar, ua, referer, proxy, extraHeaders) {
   const cookie = jar.headerFor(url);
   const bodyStr = JSON.stringify(bodyObj);
   const resp = await cycleTLS(url, {
@@ -131,6 +134,7 @@ async function tlsPost(cycleTLS, url, bodyObj, jar, ua, referer, proxy) {
       "sec-fetch-mode": "cors",
       "sec-fetch-site": "same-origin",
       ...(cookie ? { Cookie: cookie } : {}),
+      ...(extraHeaders || {}),
     },
     proxy: proxy || undefined,
     disableRedirect: false,
@@ -191,11 +195,20 @@ async function loadPage(cycleTLS, url, jar, ua, referer, proxy) {
 // ============================================================
 // Step 3: POST /api/accounts/authorize/continue  (submit email)
 // ============================================================
-async function authorizeContinue(cycleTLS, email, jar, ua, proxy) {
+async function authorizeContinue(cycleTLS, email, jar, ua, proxy, deviceId, sessionId) {
   const url = `${AUTH_BASE}/api/accounts/authorize/continue`;
   const payload = { username: { kind: "email", value: email } };
+  const extraHeaders = {};
+  
+  try {
+    const sentinelData = await generateSentinelTokens("authorize_continue", deviceId, sessionId, proxy, ua);
+    if (sentinelData && sentinelData.token) {
+      extraHeaders["openai-sentinel-chat-requirements-token"] = sentinelData.token;
+    }
+  } catch(e) { logger.warn("[OAuth] Sentinel fail for authorize_continue: " + e.message); }
+
   const resp = await tlsPost(cycleTLS, url, payload, jar, ua,
-    `${AUTH_BASE}/log-in-or-create-account`, proxy);
+    `${AUTH_BASE}/log-in-or-create-account`, proxy, extraHeaders);
 
   const data = parseJson(resp);
   if (resp.status !== 200) {
@@ -208,11 +221,20 @@ async function authorizeContinue(cycleTLS, email, jar, ua, proxy) {
 // Step 4: POST /api/accounts/password/verify  (submit password)
 // Returns { login_verifier?, continue_url? }
 // ============================================================
-async function passwordVerify(cycleTLS, password, jar, ua, proxy) {
+async function passwordVerify(cycleTLS, password, jar, ua, proxy, deviceId, sessionId) {
   const url = `${AUTH_BASE}/api/accounts/password/verify`;
   const payload = { password };
+  const extraHeaders = {};
+  
+  try {
+    const sentinelData = await generateSentinelTokens("password_verify", deviceId, sessionId, proxy, ua);
+    if (sentinelData && sentinelData.token) {
+      extraHeaders["openai-sentinel-chat-requirements-token"] = sentinelData.token;
+    }
+  } catch(e) { logger.warn("[OAuth] Sentinel fail for password_verify: " + e.message); }
+
   const resp = await tlsPost(cycleTLS, url, payload, jar, ua,
-    `${AUTH_BASE}/log-in/password`, proxy);
+    `${AUTH_BASE}/log-in/password`, proxy, extraHeaders);
 
   const data = parseJson(resp);
   if (resp.status === 401) throw new Error("401 wrong password");
@@ -345,6 +367,12 @@ async function performLoginOAuth(cycleTLS, email, password, proxyUrl, userAgent,
   const ua = userAgent || DEFAULT_UA;
   const proxy = proxyUrl || undefined;
   const jar = new CookieJar();
+  const deviceId = uuidv4();
+  const sessionId = uuidv4();
+
+  // Inject oai-did as in Go reference
+  jar._store["chatgpt.com"] = { "oai-did": deviceId };
+  jar._store["auth.openai.com"] = { "oai-did": deviceId };
 
   // Step 1: PKCE + state
   const { verifier, challenge } = generatePKCE();
@@ -376,7 +404,7 @@ async function performLoginOAuth(cycleTLS, email, password, proxyUrl, userAgent,
 
   // Step 3: Submit email
   logger.info(`[OAuth] Submitting email...`);
-  const continueData = await authorizeContinue(cycleTLS, email, jar, ua, proxy);
+  const continueData = await authorizeContinue(cycleTLS, email, jar, ua, proxy, deviceId, sessionId);
   // Follow continue_url if provided
   if (continueData.continue_url) {
     const cu = continueData.continue_url.startsWith("http")
@@ -391,7 +419,7 @@ async function performLoginOAuth(cycleTLS, email, password, proxyUrl, userAgent,
   let pwData;
   let pwErr = null;
   try {
-    pwData = await passwordVerify(cycleTLS, password, jar, ua, proxy);
+    pwData = await passwordVerify(cycleTLS, password, jar, ua, proxy, deviceId, sessionId);
     loginVerifier = pwData.login_verifier || pwData.loginVerifier || "";
   } catch (e) {
     pwErr = e;
